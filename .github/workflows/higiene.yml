@@ -1,0 +1,132 @@
+name: Higiene de credenciais
+
+# Esteira do Módulo 14. Três gates produzem evidência; um quarto decide.
+#
+# Repare no que este arquivo NÃO tem: nenhum `secrets.AWS_*`. Ele não precisa
+# falar com a AWS, então não recebe credencial nenhuma. É a primeira pergunta a
+# fazer de qualquer job: ele precisa mesmo desse segredo?
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+# Menor privilégio explícito. Sem esta declaração, o GITHUB_TOKEN entra com o
+# escopo padrão da organização — que em muitos lugares ainda é escrita.
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------- GATE 1
+  segredos:
+    name: "Gate 1 — segredos no repositório (Gitleaks)"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0            # o histórico inteiro: segredo apagado ontem continua lá
+          persist-credentials: false
+
+      - name: Instalar Gitleaks
+        run: |
+          VERSAO=8.28.0
+          curl -sSL -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${VERSAO}/gitleaks_${VERSAO}_linux_x64.tar.gz"
+          tar -xzf gitleaks.tar.gz gitleaks
+          sudo mv gitleaks /usr/local/bin/
+          gitleaks version
+
+      - name: Varrer
+        # --exit-code 0 de propósito: este gate produz evidência, não veredito.
+        run: |
+          gitleaks detect \
+            --source . \
+            --config .gitleaks.toml \
+            --report-format json \
+            --report-path gitleaks-report.json \
+            --redact \
+            --exit-code 0 \
+            --verbose || true
+          echo "Achados: $(python3 -c 'import json;print(len(json.load(open("gitleaks-report.json"))))' 2>/dev/null || echo 0)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: relatorio-gitleaks
+          path: gitleaks-report.json
+          if-no-files-found: warn
+
+  # ---------------------------------------------------------------- GATE 2
+  testes:
+    name: "Gate 2 — testes da aplicação"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Testes da aplicação
+        working-directory: app
+        run: npm test
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Testes do auditor
+        run: |
+          pip install --quiet pyyaml
+          python3 scripts/test_auditoria.py
+
+  # ---------------------------------------------------------------- GATE 3 e 4
+  auditoria:
+    name: "Gate 3 — auditoria da própria esteira / Gate 4 — decisão"
+    runs-on: ubuntu-latest
+    needs: [segredos]
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependência
+        run: pip install --quiet pyyaml
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: relatorio-gitleaks
+        continue-on-error: true
+
+      - name: Auditar e decidir
+        # Único ponto de decisão da esteira. O script sai com 1 quando a
+        # política de scripts/politica.yaml manda bloquear.
+        run: |
+          python3 scripts/auditoria_higiene.py \
+            --gitleaks gitleaks-report.json \
+            --json auditoria.json \
+            --md auditoria.md
+          cat auditoria.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publicar o resumo mesmo quando bloqueia
+        if: failure()
+        run: cat auditoria.md >> "$GITHUB_STEP_SUMMARY" || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: relatorio-auditoria
+          path: |
+            auditoria.json
+            auditoria.md
+          if-no-files-found: warn

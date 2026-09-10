@@ -1,0 +1,50 @@
+# Política de risco da esteira — quem decide o que reprova.
+#
+# Este arquivo é o entregável do Grupo 4 (Qualidade) no exercício.
+#
+# Repare no desenho: os gates de varredura (Gitleaks, auditoria) NUNCA reprovam
+# sozinhos. Eles produzem evidência. Quem decide é esta política. Se cada
+# ferramenta puder barrar a release por conta própria, você tem várias donas de
+# política e nenhuma priorização — foi a lição do Módulo 12, e vale igual aqui.
+
+versao: 1
+
+# Quantos achados de cada severidade a esteira tolera antes de bloquear.
+# Zero significa "nenhum passa".
+bloqueia_a_partir_de:
+  CRITICA: 0
+  ALTA: 0
+  MEDIA: 3
+  # BAIXA não bloqueia em nenhuma quantidade — nem aparece aqui.
+
+# Regras que não contam para o bloqueio. Use com parcimônia e SEMPRE com
+# justificativa e prazo: isenção sem data de validade vira política permanente
+# que ninguém lembra de ter aprovado.
+regras_isentas:
+  - H4   # ações presas a tag em vez de SHA
+
+justificativas:
+  H4:
+    motivo: >
+      O material da aula usa tags para ficar legível. Em repositório de verdade,
+      prender ao SHA é obrigatório: tag é ponteiro móvel e quem controla a ação
+      passa a executar código dentro da sua esteira, com acesso aos segredos
+      daquele job.
+    revisar_ate: "2026-12-31"
+    aprovado_por: "material didático — não replicar em produção"
+
+# --------------------------------------------------------------------------
+# Para o Grupo 4 discutir (não há resposta única):
+#
+#   1. H7 (checkout guardando o token no executor) está como MEDIA. Com o
+#      limite em 3, três desses passam. Isso é aceitável num repositório que
+#      publica na produção do banco?
+#
+#   2. H6 diz que credencial no código é CRITICA quando a aplicação carrega o
+#      arquivo, e MEDIA quando não carrega. O segredo, porém, está no histórico
+#      do Git nos dois casos. A distinção faz sentido, ou é conforto?
+#
+#   3. Se a esteira bloqueia e o time precisa publicar uma correção urgente,
+#      qual é o caminho? Não existir caminho é tão ruim quanto existir um que
+#      todo mundo usa todo dia.
+# --------------------------------------------------------------------------

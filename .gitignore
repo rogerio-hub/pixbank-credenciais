@@ -1,0 +1,24 @@
+node_modules/
+.venv/
+*.log
+.env
+gitleaks-report.json
+auditoria.json
+auditoria.md
+funcao.zip
+
+# Terraform
+infra/.terraform/
+infra/.build/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terraform.lock.hcl
+
+# Cópia temporária dos workflows criada na entrega (a ponte de arquivos não
+# escreve em .github/workflows). Os arquivos válidos estão em .github/workflows/.
+workflows-github/
+.DS_Store
+__pycache__/
+*.pyc

@@ -1,0 +1,71 @@
+name: Publicar na AWS
+
+# ============================================================================
+# GABARITO do Grupo 3. Substitui .github/workflows/deploy.yml.
+#
+# A diferença em uma frase: este arquivo não guarda credencial nenhuma.
+# Ele pede um token de identidade ao próprio GitHub, entrega esse token à AWS,
+# e a AWS devolve uma credencial temporária — válida por menos de uma hora,
+# só para este repositório, só nesta branch, só para esta ação.
+#
+# Depois de aplicar, ainda faltam DUAS coisas que a esteira não faz por você:
+#   1. Apagar os segredos AWS_ACCESS_KEY_ID e AWS_SECRET_ACCESS_KEY do repositório.
+#   2. REVOGAR a chave no IAM. Trocar o método sem revogar a chave antiga não
+#      resolve nada — a credencial continua válida para quem já a copiou.
+# ============================================================================
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["app/**", ".github/workflows/deploy.yml"]
+
+permissions:
+  contents: read          # menor privilégio no topo
+
+concurrency:
+  group: publicar-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    name: Publicar a função
+    runs-on: ubuntu-latest
+    environment: producao     # exige aprovação, se o ambiente estiver configurado
+    permissions:
+      contents: read
+      id-token: write         # <- a única linha que habilita o OIDC
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Assumir a role na AWS por OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}   # `vars`, não `secrets`: um ARN não é segredo
+          role-session-name: gh-${{ github.run_id }}
+          aws-region: sa-east-1
+
+      - name: Conferir quem eu sou
+        # Boa prática de aula: mostra que a identidade é temporária e nomeada.
+        run: aws sts get-caller-identity
+
+      - name: Empacotar
+        run: cd app && zip -qr ../funcao.zip . -x 'test/*'
+
+      - name: Publicar o código
+        run: |
+          aws lambda update-function-code \
+            --function-name pixbank-credenciais \
+            --zip-file fileb://funcao.zip \
+            --publish
+
+      - name: Configurar a função
+        # Só o NOME do parâmetro. O valor fica no SSM e é lido em tempo de
+        # execução pela role da própria função. Rotacionar a senha passa a ser
+        # um `aws ssm put-parameter` — sem release, sem esteira, sem deploy.
+        run: |
+          aws lambda update-function-configuration \
+            --function-name pixbank-credenciais \
+            --environment "Variables={PIXBANK_PARAM_SENHA=/pixbank/prod/db/senha,PIXBANK_VERSAO=${{ github.sha }}}"

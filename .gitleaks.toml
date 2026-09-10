@@ -1,0 +1,55 @@
+# Configuração do Gitleaks para o PixBank.
+#
+# LIÇÃO DESTE ARQUIVO
+# -------------------
+# Toda ferramenta de varredura vem com uma allowlist embutida. O Gitleaks, por
+# padrão, IGNORA a chave AKIAIOSFODNN7EXAMPLE — é a chave que aparece na
+# própria documentação da AWS, e ignorá-la evita um mar de falso positivo.
+#
+# O efeito colateral é que, num repositório que copiou aquele exemplo e trocou
+# só o segredo, a varredura passa limpa. A pergunta que fica para qualquer
+# ferramenta que você adotar: **o que ela está deixando passar de propósito?**
+#
+# A regra `pixbank-chave-aws-exemplo` abaixo existe para tornar isso visível em
+# sala: ela reprova o padrão AKIA... inclusive o exemplo da documentação.
+
+title = "PixBank — regras de varredura de segredos"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "pixbank-chave-aws-exemplo"
+description = "Chave de acesso AWS (inclui o exemplo da documentação, que o padrão ignora)"
+regex = '''(A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}'''
+tags = ["aws", "chave-estatica"]
+
+[[rules]]
+id = "pixbank-senha-em-codigo"
+description = "Senha atribuída em código-fonte"
+regex = '''(?i)\b(senha|password|passwd|pwd)\s*[:=]\s*['"][^'"\s]{8,}['"]'''
+tags = ["senha"]
+[rules.allowlist]
+# Placeholders de documentação, teste e exemplo não devem reprovar.
+# (Repare que isto é, ele mesmo, um allowlist — a coisa contra a qual o
+# comentário no topo deste arquivo alerta. A diferença é que este está escrito
+# aqui, versionado e revisável em PR, em vez de embutido na ferramenta.)
+regexTarget = "line"
+regexes = [
+  '''(?i)(sua[-_ ]senha|troque[-_ ]?me|change[-_ ]?me|exemplo|xxxxx+|senha-de-teste)''',
+]
+
+[[rules]]
+id = "pixbank-segredo-jwt"
+description = "Segredo de assinatura de token em código-fonte"
+regex = '''(?i)\b(jwt[-_ ]?secret|token[-_ ]?secret|signing[-_ ]?key)\s*[:=]\s*['"][^'"\s]{8,}['"]'''
+tags = ["jwt"]
+
+[allowlist]
+description = "Caminhos que não devem ser varridos"
+paths = [
+  '''(^|/)node_modules/''',
+  '''(^|/)\.git/''',
+  '''(^|/)docs/''',
+  '''\.md$''',
+]

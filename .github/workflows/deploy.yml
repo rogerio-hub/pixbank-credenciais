@@ -1,0 +1,58 @@
+name: Publicar na AWS (versão a corrigir)
+
+# ============================================================================
+# ESTE ARQUIVO ESTÁ ERRADO DE PROPÓSITO. É o ponto de partida do exercício.
+#
+# Ele publica a função usando um par de chaves estáticas da AWS guardado nos
+# segredos do repositório. Funciona. Foi assim que quase todo mundo começou.
+# E é exatamente o vetor do caso C&M Software (jun/2025): uma credencial de
+# longa duração que valia de qualquer lugar e que ninguém revogou.
+#
+# A tarefa do Grupo 3 é reescrever este arquivo para autenticar por OIDC.
+# O gabarito está em docs/gabarito/deploy.yml — só depois de tentar.
+# ============================================================================
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publicar:
+    name: Publicar a função
+    runs-on: ubuntu-latest
+    # PROBLEMA (H3): sem `permissions`, este job recebe o escopo padrão da
+    # organização. E, sem `id-token: write`, ele nem conseguiria pedir um
+    # token OIDC se quisesse.
+    steps:
+      - uses: actions/checkout@v4
+        # PROBLEMA (H7): sem `persist-credentials: false`, o token do checkout
+        # fica no .git/config do executor, ao alcance de qualquer passo seguinte.
+
+      - name: Configurar credenciais da AWS
+        # PROBLEMA (H1): chave estática. Não expira, vale do mundo inteiro,
+        # sobrevive à saída de quem a criou e só some quando alguém lembrar
+        # de revogá-la no IAM.
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: sa-east-1
+
+      - name: Empacotar
+        run: |
+          cd app && zip -qr ../funcao.zip . -x 'test/*'
+
+      - name: Publicar o código
+        run: |
+          aws lambda update-function-code \
+            --function-name pixbank-credenciais \
+            --zip-file fileb://funcao.zip
+
+      - name: Configurar a função
+        # PROBLEMA (H8): a senha do banco vira variável de ambiente da função.
+        # Aparece no console, na API de descrição da função e em qualquer erro
+        # que serialize o ambiente. E só muda com um novo deploy: rotação de
+        # senha passa a exigir release.
+        run: |
+          aws lambda update-function-configuration \
+            --function-name pixbank-credenciais \
+            --environment "Variables={DB_PASSWORD=${{ secrets.DB_PASSWORD }},PIXBANK_VERSAO=${{ github.sha }}}"
