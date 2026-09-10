@@ -1,7 +1,7 @@
 # PixBank — Higiene de Credenciais
 
-Repositório de exercício do **Módulo 14 — Boas Práticas de Higiene Digital e Senhas**
-(DevSecOps · FIAP / Caixa).
+Repositório de exercício do **Módulo de Boas Práticas de Higiene Digital e Senhas**
+(DevSecOps).
 
 O módulo passa três horas falando de senha de gente: comprimento, reutilização,
 MFA, phishing. Este repositório faz a pergunta que fecha o assunto:
